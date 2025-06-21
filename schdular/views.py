@@ -13,7 +13,6 @@ API_GENERATE_ENDPOINT = f"{api_server}/api/gameEngine/"
 
 
 
-
 @api_view(['POST'])
 def generate_and_insert_riddles(request):
     """Call internal riddle API 100 times and insert each result into DB."""
@@ -29,41 +28,36 @@ def generate_and_insert_riddles(request):
 
     inserted = 0
     errors = []
+    cur = conn.cursor()
 
-    try:
-        cur = conn.cursor()
+    for _ in range(10):
+        try:
+            res = requests.post(API_GENERATE_ENDPOINT, timeout=15)
+            if res.status_code != 200:
+                errors.append(f"API error: {res.status_code}")
+                continue
 
-        for i in range(100):
-            try:
-                res = requests.post(API_GENERATE_ENDPOINT, timeout=15)
-                if res.status_code != 200:
-                    errors.append(f"[{i}] API error: {res.status_code}")
-                    continue
+            data = res.json()
+          
+            # Serialize lists and JSONB
+            values = (
+                data["answer"],
+                data["image_urls"],
+                data["image_alt_texts"],
+                data["close_guesses"],
+                data.get("category"),
+                Json(data["explanations"]),  # psycopg2.extras.Json for JSONB
+            )
 
-                data = res.json()
+            cur.execute(insert_sql, values)
+            inserted += 1
 
-                values = (
-                    data["answer"],
-                    data["image_urls"],
-                    data["image_alt_texts"],
-                    data["close_guesses"],
-                    data.get("category"),
-                    Json(data["explanations"]),  # For JSONB
-                )
+        except Exception as e:
+            errors.append(str(e))
 
-                cur.execute(insert_sql, values)
-                conn.commit()  # ✅ COMMIT immediately after success
-                inserted += 1
-
-            except Exception as e:
-                conn.rollback()  # Roll back this attempt only
-                errors.append(f"[{i}] Exception: {str(e)}")
-
-        cur.close()
-        conn.close()
-
-    except Exception as outer_e:
-        return Response({"error": str(outer_e)}, status=500)
+    conn.commit()
+    cur.close()
+    conn.close()
 
     return Response({
         "status": "completed",
