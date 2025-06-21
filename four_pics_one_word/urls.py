@@ -22,6 +22,8 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('gameEngine.urls')),  # <- assuming gameEngine is your app name
     path('schdular/', include('schdular.urls')),
+    path('leaderboard/', include('leaderboard.urls')),
+
 
 ]
 
